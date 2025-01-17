@@ -1,3 +1,4 @@
+import React from 'react'
 import ImageRenamer from './components/ImageRenamer'
 
 export default function Home() {
