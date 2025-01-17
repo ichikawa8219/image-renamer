@@ -13,7 +13,7 @@ export default function Home() {
           <section>
             <h3 className="text-lg font-medium mb-2">📝 基本的な使い方</h3>
             <ol className="list-decimal list-inside space-y-2 text-gray-600">
-              <li>画像ファイルをドラッグ＆ドロップするか、「ファイルを選択」ボタンから画像を選択します</li>
+              <li>画像ファイルまたはフォルダをドラッグ＆ドロップするか、「ファイル/フォルダを選択」ボタンから選択します</li>
               <li>必要に応じて接頭辞・接尾辞を入力します（例: 「vacation_」「_2024」など）</li>
               <li>「ファイルをリネーム」ボタンをクリックします</li>
               <li>処理が完了すると、リネームされた画像ファイルがZIPファイルとしてダウンロードされます</li>
