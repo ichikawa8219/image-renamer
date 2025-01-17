@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
-import { Upload, ImageIcon, Hash } from 'lucide-react'
+import { Upload, ImageIcon } from 'lucide-react'
 import { shuffleArray } from '@/lib/utils'
 import JSZip from 'jszip'
 import { toast } from "sonner"
@@ -17,7 +17,6 @@ export default function ImageRenamer() {
   const [progress, setProgress] = useState(0)
   const [isRenaming, setIsRenaming] = useState(false)
   const [fileUrls, setFileUrls] = useState<string[]>([])
-  const [isDirectoryMode, setIsDirectoryMode] = useState(false)
 
   useEffect(() => {
     return () => {
@@ -46,9 +45,24 @@ export default function ImageRenamer() {
     setFiles(selectedFiles)
   }, [fileUrls])
 
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      processFiles(e.target.files)
+      const items = Array.from(e.target.files)
+      const allFiles: File[] = []
+
+      // フォルダかどうかを判断（最初のファイルのパスに '/' が含まれているかで判断）
+      const isDirectory = items.some(file => file.webkitRelativePath.includes('/'))
+
+      if (isDirectory) {
+        // フォルダの場合は全ファイルを収集
+        allFiles.push(...items)
+        toast.info('フォルダから画像を読み込んでいます...')
+      } else {
+        // 通常のファイル選択の場合
+        allFiles.push(...items)
+      }
+
+      processFiles(allFiles)
     }
   }, [processFiles])
 
@@ -66,6 +80,7 @@ export default function ImageRenamer() {
           })
           allFiles.push(file)
         } else if (entry.isDirectory) {
+          toast.info('フォルダから画像を読み込んでいます...')
           const reader = (entry as FileSystemDirectoryEntry).createReader()
           const entries = await new Promise<FileSystemEntry[]>((resolve) => {
             reader.readEntries(resolve)
@@ -146,12 +161,6 @@ export default function ImageRenamer() {
     }
   }
 
-  const toggleDirectoryMode = () => {
-    setIsDirectoryMode(!isDirectoryMode)
-    setFiles([])
-    setFileUrls([])
-  }
-
   return (
     <div className="max-w-4xl mx-auto font-sans">
       <div
@@ -162,40 +171,34 @@ export default function ImageRenamer() {
       >
         <Upload className="mx-auto h-12 w-12 text-gray-400" />
         <p className="mt-2 text-sm text-gray-600">
-          ここに{isDirectoryMode ? 'フォルダ' : '画像'}をドラッグ＆ドロップするか、クリックして{isDirectoryMode ? 'フォルダ' : 'ファイル'}を選択してください
+          画像ファイルまたはフォルダをドラッグ＆ドロップ、もしくはクリックして選択してください
         </p>
-        <div className="mt-4 space-y-2">
+        <div className="mt-4">
           <input
             type="file"
-            multiple={!isDirectoryMode}
-            webkitdirectory={isDirectoryMode ? "" : undefined}
+            multiple
+            // @ts-ignore
+            webkitdirectory=""
+            // @ts-ignore
+            directory=""
             accept="image/*"
             onChange={handleFileChange}
             className="sr-only"
             id="file-upload"
           />
-          <div className="space-x-2">
-            <label 
-              htmlFor="file-upload" 
-              className="inline-block"
-            >
-              <Button 
-                variant="outline" 
-                className="cursor-pointer"
-                type="button"
-                onClick={() => document.getElementById('file-upload')?.click()}
-              >
-                {isDirectoryMode ? 'フォルダを選択' : 'ファイルを選択'}
-              </Button>
-            </label>
-            <Button
-              variant="outline"
-              onClick={toggleDirectoryMode}
+          <label 
+            htmlFor="file-upload" 
+            className="inline-block"
+          >
+            <Button 
+              variant="outline" 
+              className="cursor-pointer"
               type="button"
+              onClick={() => document.getElementById('file-upload')?.click()}
             >
-              {isDirectoryMode ? 'ファイル選択モードへ' : 'フォルダ選択モードへ'}
+              ファイル/フォルダを選択
             </Button>
-          </div>
+          </label>
         </div>
       </div>
 
