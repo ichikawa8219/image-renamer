@@ -17,6 +17,7 @@ export default function ImageRenamer() {
   const [progress, setProgress] = useState(0)
   const [isRenaming, setIsRenaming] = useState(false)
   const [fileUrls, setFileUrls] = useState<string[]>([])
+  const [isDirectoryMode, setIsDirectoryMode] = useState(false)
 
   useEffect(() => {
     return () => {
@@ -24,52 +25,71 @@ export default function ImageRenamer() {
     }
   }, [fileUrls])
 
+  const processFiles = useCallback((inputFiles: FileList | File[]) => {
+    fileUrls.forEach(url => URL.revokeObjectURL(url))
+    
+    const selectedFiles = Array.from(inputFiles).filter(file => 
+      file.type.startsWith('image/')
+    )
+    
+    if (selectedFiles.length === 0) {
+      toast.error('画像ファイルを選択してください')
+      return
+    }
+
+    if (selectedFiles.length !== inputFiles.length) {
+      toast.warning('画像ファイル以外は除外されました')
+    }
+
+    const urls = selectedFiles.map(file => URL.createObjectURL(file))
+    setFileUrls(urls)
+    setFiles(selectedFiles)
+  }, [fileUrls])
+
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      fileUrls.forEach(url => URL.revokeObjectURL(url))
-      
-      const selectedFiles = Array.from(e.target.files).filter(file => 
-        file.type.startsWith('image/')
-      )
-      
-      if (selectedFiles.length === 0) {
-        toast.error('画像ファイルを選択してください')
-        return
-      }
-
-      if (selectedFiles.length !== Array.from(e.target.files).length) {
-        toast.warning('画像ファイル以外は除外されました')
-      }
-
-      const urls = selectedFiles.map(file => URL.createObjectURL(file))
-      setFileUrls(urls)
-      setFiles(selectedFiles)
+      processFiles(e.target.files)
     }
-  }, [fileUrls])
+  }, [processFiles])
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
-    if (e.dataTransfer.files) {
-      fileUrls.forEach(url => URL.revokeObjectURL(url))
+    if (e.dataTransfer.items) {
+      const items = Array.from(e.dataTransfer.items)
+      const allFiles: File[] = []
+      let pendingItems = items.length
 
-      const droppedFiles = Array.from(e.dataTransfer.files).filter(file => 
-        file.type.startsWith('image/')
-      )
-
-      if (droppedFiles.length === 0) {
-        toast.error('画像ファイルをドロップしてください')
-        return
+      const processEntry = async (entry: FileSystemEntry) => {
+        if (entry.isFile) {
+          const file = await new Promise<File>((resolve) => {
+            (entry as FileSystemFileEntry).file(resolve)
+          })
+          allFiles.push(file)
+        } else if (entry.isDirectory) {
+          const reader = (entry as FileSystemDirectoryEntry).createReader()
+          const entries = await new Promise<FileSystemEntry[]>((resolve) => {
+            reader.readEntries(resolve)
+          })
+          await Promise.all(entries.map(processEntry))
+        }
       }
 
-      if (droppedFiles.length !== e.dataTransfer.files.length) {
-        toast.warning('画像ファイル以外は除外されました')
+      const processItem = async (item: DataTransferItem) => {
+        const entry = item.webkitGetAsEntry()
+        if (entry) {
+          await processEntry(entry)
+        }
+        pendingItems--
+        if (pendingItems === 0) {
+          processFiles(allFiles)
+        }
       }
 
-      const urls = droppedFiles.map(file => URL.createObjectURL(file))
-      setFileUrls(urls)
-      setFiles(droppedFiles)
+      items.forEach(item => processItem(item))
+    } else if (e.dataTransfer.files) {
+      processFiles(e.dataTransfer.files)
     }
-  }, [fileUrls])
+  }, [processFiles])
 
   const preventDefault = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -85,31 +105,24 @@ export default function ImageRenamer() {
       setIsRenaming(true)
       setProgress(0)
 
-      // ファイルをランダムに並び替え
       const shuffledFiles = shuffleArray([...files])
       const zip = new JSZip()
       
-      // 進捗計算用の変数
       const totalSteps = shuffledFiles.length
       let completedSteps = 0
 
-      // 各ファイルを処理
       for (const [index, file] of shuffledFiles.entries()) {
         const extension = file.name.split('.').pop() || 'jpg'
         const newName = getNewFileName(index, extension)
         
-        // ファイルをZIPに追加
         zip.file(newName, file)
         
-        // 進捗を更新
         completedSteps++
         setProgress((completedSteps / totalSteps) * 100)
         
-        // UIの更新のために少し待機
         await new Promise(resolve => setTimeout(resolve, 50))
       }
 
-      // ZIPファイルを生成してダウンロード
       const content = await zip.generateAsync({ 
         type: 'blob',
         compression: 'DEFLATE',
@@ -133,6 +146,12 @@ export default function ImageRenamer() {
     }
   }
 
+  const toggleDirectoryMode = () => {
+    setIsDirectoryMode(!isDirectoryMode)
+    setFiles([])
+    setFileUrls([])
+  }
+
   return (
     <div className="max-w-4xl mx-auto font-sans">
       <div
@@ -142,29 +161,41 @@ export default function ImageRenamer() {
         onDragEnter={preventDefault}
       >
         <Upload className="mx-auto h-12 w-12 text-gray-400" />
-        <p className="mt-2 text-sm text-gray-600">ここに画像をドラッグ＆ドロップするか、クリックしてファイルを選択してください</p>
-        <div className="mt-4">
+        <p className="mt-2 text-sm text-gray-600">
+          ここに{isDirectoryMode ? 'フォルダ' : '画像'}をドラッグ＆ドロップするか、クリックして{isDirectoryMode ? 'フォルダ' : 'ファイル'}を選択してください
+        </p>
+        <div className="mt-4 space-y-2">
           <input
             type="file"
-            multiple
+            multiple={!isDirectoryMode}
+            webkitdirectory={isDirectoryMode ? "" : undefined}
             accept="image/*"
             onChange={handleFileChange}
             className="sr-only"
             id="file-upload"
           />
-          <label 
-            htmlFor="file-upload" 
-            className="inline-block"
-          >
-            <Button 
-              variant="outline" 
-              className="cursor-pointer"
-              type="button"
-              onClick={() => document.getElementById('file-upload')?.click()}
+          <div className="space-x-2">
+            <label 
+              htmlFor="file-upload" 
+              className="inline-block"
             >
-              ファイルを選択
+              <Button 
+                variant="outline" 
+                className="cursor-pointer"
+                type="button"
+                onClick={() => document.getElementById('file-upload')?.click()}
+              >
+                {isDirectoryMode ? 'フォルダを選択' : 'ファイルを選択'}
+              </Button>
+            </label>
+            <Button
+              variant="outline"
+              onClick={toggleDirectoryMode}
+              type="button"
+            >
+              {isDirectoryMode ? 'ファイル選択モードへ' : 'フォルダ選択モードへ'}
             </Button>
-          </label>
+          </div>
         </div>
       </div>
 
